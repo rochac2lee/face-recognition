@@ -2,3 +2,4 @@ album/*
 uploads/*
 *.jpg
 *.png
+.cursor/
