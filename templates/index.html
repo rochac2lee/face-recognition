@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconhecimento Facial</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Reconhecimento Facial</h1>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">
+                            <img src="{{ url_for('static', filename='icons/cloud-upload-outline.svg') }}" alt="Upload" width="100" height="100">
+                        </div>
+                        <h3>Arraste e solte uma imagem aqui</h3>
+                        <p>ou clique para selecionar</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                    </div>
+                </div>
+                
+                <div class="upload-controls">
+                    <button id="uploadBtn" class="btn btn-primary" disabled>
+                        🔍 Buscar no Álbum
+                    </button>
+                    <button id="clearBtn" class="btn btn-secondary">
+                        🗑️ Limpar
+                    </button>
+                </div>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h2>Resultados</h2>
+                <div class="results-content">
+                    <div class="matches-container main-results">
+                        <h3>Correspondências encontradas</h3>
+                        <div id="matchesList" class="matches-list">
+                            <!-- Matches serão inseridos aqui dinamicamente -->
+                        </div>
+                    </div>
+                    
+                    <div class="image-container sidebar">
+                        <h3>Imagem Enviada</h3>
+                        <img id="resultImage" alt="Imagem enviada">
+                    </div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processando imagem...</p>
+            </div>
+
+            <div class="error" id="error" style="display: none;">
+                <div class="error-icon">⚠️</div>
+                <p id="errorMessage"></p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal para visualização em tela cheia -->
+    <div id="fullscreenModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <img id="fullscreenImage" src="" alt="Imagem em tela cheia">
+            <div class="modal-info">
+                <h3 id="modalTitle">Imagem</h3>
+                <p id="modalDetails"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
