@@ -1,2 +1,4 @@
 album/*
 uploads/*
+*.jpg
+*.png
