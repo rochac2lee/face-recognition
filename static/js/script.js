@@ -1,4 +1,4 @@
-// Elementos DOM
+// Pega os elementos da página
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
@@ -15,7 +15,7 @@ const resultsStats = document.getElementById('resultsStats');
 
 let selectedFile = null;
 
-// Event Listeners
+// Configura os eventos
 uploadArea.addEventListener('click', () => fileInput.click());
 uploadArea.addEventListener('dragover', handleDragOver);
 uploadArea.addEventListener('dragleave', handleDragLeave);
@@ -24,7 +24,7 @@ fileInput.addEventListener('change', handleFileSelect);
 uploadBtn.addEventListener('click', uploadFile);
 clearBtn.addEventListener('click', clearAll);
 
-// Drag and Drop
+// Funções pra arrastar e soltar arquivos
 function handleDragOver(e) {
     e.preventDefault();
     uploadArea.classList.add('dragover');
@@ -45,7 +45,7 @@ function handleDrop(e) {
     }
 }
 
-// File Selection
+// Função pra quando seleciona arquivo
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (file) {
@@ -62,14 +62,14 @@ function handleFile(file) {
     selectedFile = file;
     uploadBtn.disabled = false;
     
-    // Preview da imagem
+    // Mostra preview da imagem
     const reader = new FileReader();
     reader.onload = (e) => {
         uploadArea.innerHTML = `
             <div class="upload-content">
                 <div class="image-preview">
-                    <img src="${e.target.result}" alt="Preview" style="max-width: 100px; max-height: 100px; border-radius: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                    <p style="margin-top: 1rem; color: var(--gray-600);">${file.name}</p>
+                    <img src="${e.target.result}" alt="Preview" style="width: 100px; max-height: 100px; border-radius: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <p style="margin-top: 1rem; font-size: 24px; color: var(--gray-600);">${file.name}</p>
                 </div>
             </div>
         `;
@@ -82,7 +82,7 @@ function isValidImage(file) {
     return validTypes.includes(file.type);
 }
 
-// Upload
+// Função pra enviar arquivo
 async function uploadFile() {
     if (!selectedFile) {
         showError('Por favor, selecione uma imagem primeiro');
@@ -124,28 +124,28 @@ async function uploadFile() {
     }
 }
 
-// Display Results
+// Mostra os resultados
 function showResults(data) {
-    // Mostrar imagem enviada
+    // Mostra a imagem que foi enviada
     if (data.image_with_boxes) {
         resultImage.src = 'data:image/jpeg;base64,' + data.image_with_boxes;
     }
     
-    // Atualizar estatísticas
+    // Atualiza as estatísticas
     const stats = `${data.faces_detected} face(s) detectada(s) • ${data.matches_found} correspondência(s) encontrada(s)`;
     resultsStats.textContent = stats;
     matchesCount.textContent = `${data.matches_found} fotos`;
     
-    // Limpar matches anteriores
+    // Limpa os matches anteriores
     matchesList.innerHTML = '';
     
-    // Criar cards para cada match
+    // Cria cards pra cada match
     data.matches.forEach((match, index) => {
         const matchCard = createMatchCard(match, index);
         matchesList.appendChild(matchCard);
     });
     
-    // Mostrar seção de resultados
+    // Mostra a seção de resultados
     resultsSection.style.display = 'block';
     resultsSection.scrollIntoView({ behavior: 'smooth' });
 }
@@ -166,7 +166,7 @@ function createMatchCard(match, index) {
         </div>
     `;
     
-    // Adicionar evento de clique para ampliar
+    // Adiciona evento de clique pra ampliar
     card.addEventListener('click', () => {
         openImageModal(`/album/${match.filename}`, match);
     });
@@ -175,7 +175,7 @@ function createMatchCard(match, index) {
 }
 
 function openImageModal(imageSrc, matchData) {
-    // Criar modal simples
+    // Cria modal simples
     const modal = document.createElement('div');
     modal.style.cssText = `
         position: fixed;
@@ -208,7 +208,7 @@ function openImageModal(imageSrc, matchData) {
     });
 }
 
-// UI Helpers
+// Funções auxiliares da interface
 function showLoading() {
     loading.style.display = 'block';
     uploadBtn.disabled = true;
@@ -244,7 +244,7 @@ function clearAll() {
     hideError();
     showUploadOnly();
     
-    // Restaurar upload area
+    // Restaura a área de upload
     uploadArea.innerHTML = `
         <div class="upload-content">
             <div class="upload-placeholder">
@@ -259,7 +259,7 @@ function clearAll() {
     `;
 }
 
-// Inicialização
+// Quando a página carrega
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Face Recognition AI - Interface carregada');
+    console.log('Interface de reconhecimento facial carregada');
 });
