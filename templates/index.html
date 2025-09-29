@@ -14,10 +14,8 @@
             <div class="container">
                 <div class="header-content">
                     <div class="logo">
-                        <div class="logo-icon">🤖</div>
-                        <h1>Face Recognition AI</h1>
+                        <h1>Reconhecimento Facial</h1>
                     </div>
-                    <p class="subtitle">Encontre suas fotos com inteligência artificial</p>
                 </div>
             </div>
         </header>
@@ -25,92 +23,85 @@
         <!-- Main Content -->
         <main class="main">
             <div class="container">
-                <!-- Upload Section -->
-                <section class="upload-section" id="uploadSection">
-                    <div class="upload-card">
-                        <div class="upload-icon">
-                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7,10 12,15 17,10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
-                            </svg>
-                        </div>
-                        <h2>Envie uma foto sua</h2>
-                        <p>Faça upload de uma selfie ou foto para encontrar todas as suas imagens no banco de dados</p>
-                        
-                        <div class="upload-area" id="uploadArea">
-                            <div class="upload-content">
-                                <div class="upload-placeholder">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                                        <polyline points="21,15 16,10 5,21"/>
+                <!-- Unified Upload and Results Section -->
+                <section class="unified-section" id="unifiedSection">
+                    <div class="unified-card">
+                        <!-- Upload Section -->
+                        <div class="upload-section">
+                            <div class="upload-area" id="uploadArea">
+                                <div class="upload-content">
+                                    <div class="upload-placeholder">
+                                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                                            <polyline points="21,15 16,10 5,21"/>
+                                        </svg>
+                                        <span>Clique aqui ou arraste uma imagem</span>
+                                    </div>
+                                    <input type="file" id="fileInput" accept="image/*" hidden>
+                                </div>
+                            </div>
+                            
+                            <div class="upload-actions">
+                                <button class="btn btn-primary" id="uploadBtn" disabled>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <path d="m21 21-4.35-4.35"/>
                                     </svg>
-                                    <span>Clique aqui ou arraste uma imagem</span>
-                                </div>
-                                <input type="file" id="fileInput" accept="image/*" hidden>
+                                    Buscar Fotos
+                                </button>
+                                <button class="btn btn-secondary" id="clearBtn">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3,6 5,6 21,6"/>
+                                        <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                                    </svg>
+                                    Limpar
+                                </button>
                             </div>
                         </div>
-                        
-                        <div class="upload-actions">
-                            <button class="btn btn-primary" id="uploadBtn" disabled>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="11" cy="11" r="8"/>
-                                    <path d="m21 21-4.35-4.35"/>
-                                </svg>
-                                Buscar Fotos
-                            </button>
-                            <button class="btn btn-secondary" id="clearBtn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="3,6 5,6 21,6"/>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                </svg>
-                                Limpar
-                            </button>
+
+                        <!-- Results Section -->
+                        <div class="results-section" id="resultsSection" style="display: none;">
+                            <div class="results-header">
+                                <h2>Resultados da Busca</h2>
+                                <div class="results-stats" id="resultsStats"></div>
+                            </div>
+                            
+                            <div class="results-content">
+                                <div class="query-image">
+                                    <div class="image-card">
+                                        <h3>Imagem Enviada</h3>
+                                        <div class="image-container">
+                                            <img id="resultImage" alt="Imagem enviada">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="matches-grid">
+                                    <div class="matches-header">
+                                        <h3>Fotos Encontradas</h3>
+                                        <span class="matches-count" id="matchesCount">0 fotos</span>
+                                    </div>
+                                    <div class="matches-container" id="matchesList">
+                                        <!-- Matches serão inseridos aqui -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Loading -->
+                        <div class="loading" id="loading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <p>Analisando imagem com IA...</p>
+                        </div>
+
+                        <!-- Error -->
+                        <div class="error" id="error" style="display: none;">
+                            <div class="error-icon">⚠️</div>
+                            <p id="errorMessage"></p>
                         </div>
                     </div>
                 </section>
-
-                <!-- Results Section -->
-                <section class="results-section" id="resultsSection" style="display: none;">
-                    <div class="results-header">
-                        <h2>Resultados da Busca</h2>
-                        <div class="results-stats" id="resultsStats"></div>
-                    </div>
-                    
-                    <div class="results-content">
-                        <div class="query-image">
-                            <div class="image-card">
-                                <h3>Imagem Enviada</h3>
-                                <div class="image-container">
-                                    <img id="resultImage" alt="Imagem enviada">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="matches-grid">
-                            <div class="matches-header">
-                                <h3>Fotos Encontradas</h3>
-                                <span class="matches-count" id="matchesCount">0 fotos</span>
-                            </div>
-                            <div class="matches-container" id="matchesList">
-                                <!-- Matches serão inseridos aqui -->
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Loading -->
-                <div class="loading" id="loading" style="display: none;">
-                    <div class="loading-spinner"></div>
-                    <p>Analisando imagem com IA...</p>
-                </div>
-
-                <!-- Error -->
-                <div class="error" id="error" style="display: none;">
-                    <div class="error-icon">⚠️</div>
-                    <p id="errorMessage"></p>
-                </div>
             </div>
         </main>
     </div>
