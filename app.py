@@ -48,7 +48,7 @@ def initialize_face_engine():
             redis_port=6379,
             redis_db=0,
             # Parâmetros otimizados para fotógrafos
-            adaptive_threshold=True,  # Desabilitar threshold adaptativo para encontrar todas as fotos
+            adaptive_threshold=False,  # Desabilitar threshold adaptativo para encontrar todas as fotos
             majority_vote_k=3,  # Apenas 1 foto necessária para considerar match
             min_det_score=0.2,  # Confiança mínima mais permissiva
             ensemble_models=None  # Pode ser expandido no futuro
