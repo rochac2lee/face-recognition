@@ -3,77 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reconhecimento Facial</title>
+    <title>Reconhecimento Facial - IA</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Reconhecimento Facial</h1>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <div class="logo-icon">🤖</div>
+                        <h1>Face Recognition AI</h1>
+                    </div>
+                    <p class="subtitle">Encontre suas fotos com inteligência artificial</p>
+                </div>
+            </div>
         </header>
 
-        <main>
-            <div class="upload-section">
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-content">
+        <!-- Main Content -->
+        <main class="main">
+            <div class="container">
+                <!-- Upload Section -->
+                <section class="upload-section" id="uploadSection">
+                    <div class="upload-card">
                         <div class="upload-icon">
-                            <img src="{{ url_for('static', filename='icons/cloud-upload-outline.svg') }}" alt="Upload" width="100" height="100">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
                         </div>
-                        <h3>Arraste e solte uma imagem aqui</h3>
-                        <p>ou clique para selecionar</p>
-                        <input type="file" id="fileInput" accept="image/*" hidden>
+                        <h2>Envie uma foto sua</h2>
+                        <p>Faça upload de uma selfie ou foto para encontrar todas as suas imagens no banco de dados</p>
+                        
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-content">
+                                <div class="upload-placeholder">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <polyline points="21,15 16,10 5,21"/>
+                                    </svg>
+                                    <span>Clique aqui ou arraste uma imagem</span>
+                                </div>
+                                <input type="file" id="fileInput" accept="image/*" hidden>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-actions">
+                            <button class="btn btn-primary" id="uploadBtn" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="m21 21-4.35-4.35"/>
+                                </svg>
+                                Buscar Fotos
+                            </button>
+                            <button class="btn btn-secondary" id="clearBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3,6 5,6 21,6"/>
+                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                                </svg>
+                                Limpar
+                            </button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="upload-controls">
-                    <button id="uploadBtn" class="btn btn-primary" disabled>
-                        🔍 Buscar no Álbum
-                    </button>
-                    <button id="clearBtn" class="btn btn-secondary">
-                        🗑️ Limpar
-                    </button>
-                </div>
-            </div>
+                </section>
 
-            <div class="results-section" id="resultsSection" style="display: none;">
-                <h2>Resultados</h2>
-                <div class="results-content">
-                    <div class="matches-container main-results">
-                        <h3>Correspondências encontradas</h3>
-                        <div id="matchesList" class="matches-list">
-                            <!-- Matches serão inseridos aqui dinamicamente -->
-                        </div>
+                <!-- Results Section -->
+                <section class="results-section" id="resultsSection" style="display: none;">
+                    <div class="results-header">
+                        <h2>Resultados da Busca</h2>
+                        <div class="results-stats" id="resultsStats"></div>
                     </div>
                     
-                    <div class="image-container sidebar">
-                        <h3>Imagem Enviada</h3>
-                        <img id="resultImage" alt="Imagem enviada">
+                    <div class="results-content">
+                        <div class="query-image">
+                            <div class="image-card">
+                                <h3>Imagem Enviada</h3>
+                                <div class="image-container">
+                                    <img id="resultImage" alt="Imagem enviada">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="matches-grid">
+                            <div class="matches-header">
+                                <h3>Fotos Encontradas</h3>
+                                <span class="matches-count" id="matchesCount">0 fotos</span>
+                            </div>
+                            <div class="matches-container" id="matchesList">
+                                <!-- Matches serão inseridos aqui -->
+                            </div>
+                        </div>
                     </div>
+                </section>
+
+                <!-- Loading -->
+                <div class="loading" id="loading" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Analisando imagem com IA...</p>
+                </div>
+
+                <!-- Error -->
+                <div class="error" id="error" style="display: none;">
+                    <div class="error-icon">⚠️</div>
+                    <p id="errorMessage"></p>
                 </div>
             </div>
-
-            <div class="loading" id="loading" style="display: none;">
-                <div class="spinner"></div>
-                <p>Processando imagem...</p>
-            </div>
-
-            <div class="error" id="error" style="display: none;">
-                <div class="error-icon">⚠️</div>
-                <p id="errorMessage"></p>
-            </div>
         </main>
-    </div>
-
-    <!-- Modal para visualização em tela cheia -->
-    <div id="fullscreenModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <img id="fullscreenImage" src="" alt="Imagem em tela cheia">
-            <div class="modal-info">
-                <h3 id="modalTitle">Imagem</h3>
-                <p id="modalDetails"></p>
-            </div>
-        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
