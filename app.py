@@ -1,171 +1,123 @@
+#!/usr/bin/env python3
+"""
+Sistema de Reconhecimento Facial Profissional
+InsightFace + Faiss (Facebook) + Redis
+"""
+
 import os
-import face_recognition
-import numpy as np
-import math
+import io
+import base64
+import logging
+import threading
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
-import base64
-import io
+import cv2
+import numpy as np
+from PIL import Image
+from face_recognition_redis import FaceRecognitionRedis
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configurar Flask
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALBUM_FOLDER'] = 'album'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
-# Garantir que as pastas existam
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['ALBUM_FOLDER'], exist_ok=True)
-
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+# Extensões permitidas
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def face_distance_to_conf(face_distance, face_match_threshold=0.4):
-    """Converte distância facial em percentual de confiança"""
-    if face_distance > face_match_threshold:
-        range_val = (1.0 - face_match_threshold)
-        linear_val = (1.0 - face_distance) / (range_val * 2.0)
-        return linear_val
-    else:
-        range_val = face_match_threshold
-        linear_val = 1.0 - (face_distance / (range_val * 2.0))
-        return linear_val + ((1.0 - linear_val) * math.pow((linear_val - 0.5) * 2, 0.2))
+# Inicializar motor de reconhecimento facial
+face_engine = None
 
-def enhance_image_for_recognition(image_path):
-    """Ajusta a imagem para ficar melhor para reconhecer faces"""
+def initialize_face_engine():
+    """Inicializar o motor de reconhecimento facial"""
+    global face_engine
     try:
-        img = Image.open(image_path)
-
-        # Garante que está em RGB
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-
-        # Ajusta contraste (fotos muito escuras ficam melhores)
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(1.2)
-
-        # Melhora a nitidez (fotos borradas ficam mais nítidas)
-        enhancer = ImageEnhance.Sharpness(img)
-        img = enhancer.enhance(1.3)
-
-        # Ajusta brilho um pouco
-        enhancer = ImageEnhance.Brightness(img)
-        img = enhancer.enhance(1.1)
-
-        # Remove ruído da imagem
-        img = img.filter(ImageFilter.SMOOTH_MORE)
-
-        return np.array(img)
-
-    except Exception as e:
-        print(f"Erro ao melhorar {image_path}: {e}")
-        # Se deu problema, carrega normal
-        return face_recognition.load_image_file(image_path)
-
-
-def load_album_encodings():
-    """Processa todas as fotos do álbum e extrai as faces"""
-    album_encodings = []
-    album_filenames = []
-    
-    print(f"Carregando fotos do álbum...")
-    
-    for filename in os.listdir(app.config['ALBUM_FOLDER']):
-        if allowed_file(filename):
-            image_path = os.path.join(app.config['ALBUM_FOLDER'], filename)
+        logger.info("🚀 Inicializando motor de reconhecimento facial...")
+        face_engine = FaceRecognitionRedis(
+            model_name='buffalo_l',
+            similarity_threshold=0.32,  # Threshold base muito mais flexível
+            min_face_size=5,  # Tamanho mínimo balanceado
+            redis_host='redis',
+            redis_port=6379,
+            redis_db=0,
+            # Parâmetros otimizados para fotógrafos
+            adaptive_threshold=False,  # Desabilitar threshold adaptativo para encontrar todas as fotos
+            majority_vote_k=3,  # Apenas 1 foto necessária para considerar match
+            min_det_score=0.2,  # Confiança mínima mais permissiva
+            ensemble_models=None  # Pode ser expandido no futuro
+        )
+        logger.info("✅ Motor de reconhecimento facial inicializado com sucesso!")
+        
+        # Construir banco de dados automaticamente em background apenas se não existir
+        def build_database_background():
             try:
-                print(f"Processando {filename}...")
-                # Melhora a qualidade da imagem antes de processar
-                image = enhance_image_for_recognition(image_path)
-
-                # Primeiro tenta HOG (mais rápido)
-                face_locations = face_recognition.face_locations(image, model='hog')
-
-                # Se não achou nada, tenta CNN
-                if not face_locations:
-                    try:
-                        face_locations = face_recognition.face_locations(image, model='cnn')
-                        print(f"  -> CNN usado para {filename}")
-                    except:
-                        pass
-
-                print(f"  -> {len(face_locations)} faces encontradas em {filename}")
-
-                if face_locations:
-                    # Usa num_jitters=10 para boa precisão sem ser muito lento
-                    face_encodings = face_recognition.face_encodings(image, face_locations, num_jitters=10, model='large')
-
-                    # Salva todas as faces encontradas
-                    for idx, encoding in enumerate(face_encodings):
-                        album_encodings.append(encoding)
-                        album_filenames.append(filename)
-                        print(f"    -> Face {idx} salva para {filename}")
-                else:
-                    print(f"  -> Nenhuma face detectada em {filename}")
-
+                # Verificar se o banco já existe
+                stats = face_engine.get_database_stats()
+                if stats['total_faces'] > 0:
+                    logger.info(f"📥 Banco de dados já existe com {stats['total_faces']} faces - pulando construção automática")
+                    return
+                
+                logger.info("🏗️ Iniciando construção automática do banco de dados...")
+                stats = face_engine.build_database_from_folder(app.config['ALBUM_FOLDER'])
+                logger.info(f"✅ Banco construído automaticamente: {stats}")
             except Exception as e:
-                print(f"Erro ao processar {filename}: {e}")
-                continue
+                logger.error(f"❌ Erro na construção automática do banco: {e}")
+        
+        # Executar construção em thread separada
+        db_thread = threading.Thread(target=build_database_background, daemon=True)
+        db_thread.start()
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao inicializar motor de reconhecimento: {e}")
+        face_engine = None
 
-    print(f"Pronto: {len(album_encodings)} faces de {len(set(album_filenames))} fotos")
-    return album_encodings, album_filenames
-
-def draw_face_boxes(image_path, face_locations):
-    """Desenha retângulos azuis nas faces encontradas"""
-    image = Image.open(image_path)
-    
-    # Converte para RGB se for RGBA
-    if image.mode in ('RGBA', 'LA'):
-        # Cria fundo branco e cola a imagem
-        background = Image.new('RGB', image.size, (255, 255, 255))
-        if image.mode == 'RGBA':
-            background.paste(image, mask=image.split()[-1])
-        else:
-            background.paste(image)
-        image = background
-    elif image.mode != 'RGB':
-        image = image.convert('RGB')
-    
-    draw = ImageDraw.Draw(image)
-    
-    # Desenha os retângulos azuis
-    for (top, right, bottom, left) in face_locations:
-        draw.rectangle([left, top, right, bottom], outline='blue', width=3)
-    
-    return image
-
-def draw_specific_face_box(image_path, face_location):
-    """Desenha retângulo azul só na face que deu match"""
-    image = Image.open(image_path)
-    
-    # Converte para RGB se for RGBA
-    if image.mode in ('RGBA', 'LA'):
-        # Cria fundo branco e cola a imagem
-        background = Image.new('RGB', image.size, (255, 255, 255))
-        if image.mode == 'RGBA':
-            background.paste(image, mask=image.split()[-1])
-        else:
-            background.paste(image)
-        image = background
-    elif image.mode != 'RGB':
-        image = image.convert('RGB')
-    
-    draw = ImageDraw.Draw(image)
-    
-    # Desenha só na face que deu match
-    (top, right, bottom, left) = face_location
-    draw.rectangle([left, top, right, bottom], outline='blue', width=3)
-    
-    return image
+# Inicializar motor
+initialize_face_engine()
 
 @app.route('/')
 def index():
+    """Página principal"""
     return render_template('index.html')
+
+@app.route('/album')
+def album():
+    """Listar imagens do álbum"""
+    try:
+        album_files = []
+        if os.path.exists(app.config['ALBUM_FOLDER']):
+            for filename in os.listdir(app.config['ALBUM_FOLDER']):
+                if allowed_file(filename):
+                    album_files.append(filename)
+        return jsonify({'files': sorted(album_files)})
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar álbum: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/album/<filename>')
+def get_album_image(filename):
+    """Servir imagem do álbum"""
+    try:
+        return send_from_directory(app.config['ALBUM_FOLDER'], filename)
+    except Exception as e:
+        logger.error(f"❌ Erro ao servir imagem: {e}")
+        return jsonify({'error': str(e)}), 404
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """
+    Endpoint principal para reconhecimento facial usando InsightFace + Faiss
+    Sistema profissional com alta precisão e performance
+    """
+    if face_engine is None:
+        return jsonify({'error': 'Motor de reconhecimento não disponível'}), 500
+    
     if 'file' not in request.files:
         return jsonify({'error': 'Nenhum arquivo enviado'}), 400
     
@@ -179,161 +131,114 @@ def upload_file():
         file.save(filepath)
         
         try:
-            # Carrega as faces do álbum
-            print("=== COMEÇANDO A PROCURAR ===")
-            album_encodings, album_filenames = load_album_encodings()
+            logger.info(f"🔍 Processando imagem com InsightFace: {filename}")
             
-            print(f"Álbum carregado: {len(album_encodings)} faces de {len(set(album_filenames))} fotos")
+            # Buscar faces similares usando InsightFace + Faiss
+            results = face_engine.search_faces(filepath, top_k=50)
             
-            if not album_encodings:
-                print("ERRO: Nenhuma face encontrada no álbum!")
-                return jsonify({'error': 'Nenhuma face encontrada no álbum'}), 400
+            if not results:
+                logger.info("❌ Nenhuma face similar encontrada")
+                return jsonify({
+                    'success': True,
+                    'message': 'Nenhuma face similar encontrada no banco de dados',
+                    'matches': [],
+                    'image_with_boxes': None,
+                    'album_images_with_boxes': []
+                })
             
-            # Melhora a foto enviada
-            print(f"Processando foto enviada: {filepath}")
-            uploaded_image = enhance_image_for_recognition(filepath)
+            # Processar imagem original para mostrar faces detectadas
+            image = cv2.imread(filepath)
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            # Procura faces na foto (HOG primeiro, CNN se necessário)
-            face_locations = face_recognition.face_locations(uploaded_image, model='hog')
+            # Extrair faces da imagem de consulta para desenhar bounding boxes
+            face_data = face_engine.extract_face_embeddings(filepath)
             
-            if not face_locations:
-                try:
-                    face_locations = face_recognition.face_locations(uploaded_image, model='cnn')
-                    print(f"  -> CNN usado para foto enviada")
-                except:
-                    pass
-            
-            print(f"Faces encontradas na foto: {len(face_locations)}")
+            # Desenhar bounding boxes nas faces detectadas (verde)
+            for face_info in face_data:
+                bbox = face_info['bbox']
+                x1, y1, x2, y2 = map(int, bbox)
+                cv2.rectangle(image_rgb, (x1, y1), (x2, y2), (0, 255, 0), 3)
                 
-            if not face_locations:
-                print("ERRO: Nenhuma face detectada na foto!")
-                return jsonify({'error': 'Nenhuma face detectada na foto enviada'}), 400
+                # Adicionar texto com confiança
+                confidence_text = f"Conf: {face_info['det_score']:.2f}"
+                cv2.putText(image_rgb, confidence_text, (x1, y1-10), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
-            # Usa num_jitters=10 para boa precisão sem ser muito lento
-            face_encodings = face_recognition.face_encodings(uploaded_image, face_locations, num_jitters=10, model='large')
-            print(f"Faces codificadas: {len(face_encodings)}")
-            
-            # Procura correspondências usando o método oficial compare_faces
-            matches = []
-            seen_combinations = set()
-            
-            for i, face_encoding in enumerate(face_encodings):
-                print(f"\n=== PROCURANDO FACE {i} ===")
-                
-                # Usa o método oficial compare_faces com tolerance=0.5 (equilibrado)
-                results = face_recognition.compare_faces(album_encodings, face_encoding, tolerance=0.5)
-                distances = face_recognition.face_distance(album_encodings, face_encoding)
-                
-                print(f"Distâncias: {[f'{d:.3f}' for d in distances[:5]]}... (5 primeiras)")
-                print(f"Menor distância: {min(distances):.3f}")
-                
-                # Processa apenas os matches válidos
-                for j, (is_match, distance) in enumerate(zip(results, distances)):
-                    if is_match:
-                        # Calcula confiança usando a fórmula oficial da documentação
-                        confidence = face_distance_to_conf(distance, face_match_threshold=0.5)
-                        
-                        print(f"  -> MATCH VÁLIDO: {album_filenames[j]}")
-                        print(f"     Distância: {distance:.3f}")
-                        print(f"     Confiança: {confidence:.3f} ({confidence*100:.1f}%)")
-                        
-                        # Evita duplicatas
-                        combination = (i, album_filenames[j])
-                        if combination not in seen_combinations:
-                            seen_combinations.add(combination)
-                            matches.append({
-                                'face_index': i,
-                                'album_filename': album_filenames[j],
-                                'distance': float(distance),
-                                'confidence': float(confidence)
-                            })
-            
-            # Ordena por confiança (melhor primeiro)
-            matches.sort(key=lambda x: x['confidence'], reverse=True)
-            
-            # Limita a 10 matches no máximo
-            matches = matches[:10]
-            
-            # Desenha retângulos nas faces da foto original
-            image_with_boxes = draw_face_boxes(filepath, face_locations)
-            
-            # Converte para base64
+            # Converter para base64
+            pil_image = Image.fromarray(image_rgb)
             buffered = io.BytesIO()
-            image_with_boxes.save(buffered, format="JPEG")
+            pil_image.save(buffered, format="JPEG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
-            # Processa as fotos do álbum que deram match
+            # Processar imagens dos matches
             album_images_with_boxes = []
-            unique_albums = {}  # Agrupa por foto e pega o melhor match
+            seen_persons = set()
             
-            # Pega só o melhor match de cada foto
-            for match in matches:
-                filename = match['album_filename']
-                if filename not in unique_albums or match['confidence'] > unique_albums[filename]['confidence']:
-                    unique_albums[filename] = match
-            
-            print(f"Total de matches: {len(matches)}")
-            print(f"Fotos únicas: {list(unique_albums.keys())}")
-            
-            if not matches:
-                print("NENHUM MATCH ENCONTRADO! Verifique:")
-                print("1. Se as fotos estão carregando direito")
-                print("2. Se as faces estão sendo detectadas")
-                print("3. Se os critérios não estão muito restritivos")
-            
-            # Processa cada foto que deu match
-            for match in unique_albums.values():
-                album_path = os.path.join(app.config['ALBUM_FOLDER'], match['album_filename'])
+            for result in results:
+                person_id = result['person_id']
+                if person_id in seen_persons:
+                    continue
+                seen_persons.add(person_id)
+                
                 try:
-                    # Melhora a foto do álbum
-                    album_image = enhance_image_for_recognition(album_path)
+                    # Carregar imagem do match
+                    match_image_path = result['image_path']
+                    match_image = cv2.imread(match_image_path)
                     
-                    # Procura faces na foto do álbum (HOG primeiro)
-                    album_face_locations = face_recognition.face_locations(album_image, model='hog')
-                    
-                    # Usa a face da foto enviada para comparar
-                    uploaded_face_encoding = face_encodings[match['face_index']]
-                    
-                    # Compara com todas as faces da foto do álbum
-                    album_face_encodings = face_recognition.face_encodings(album_image, album_face_locations, num_jitters=10, model='large')
-                    face_distances = face_recognition.face_distance(album_face_encodings, uploaded_face_encoding)
-                    
-                    # Pega a face com menor distância (mais parecida)
-                    best_face_index = face_distances.argmin()
-                    best_face_location = album_face_locations[best_face_index]
-                    best_distance = face_distances[best_face_index]
-                    
-                    print(f"  -> Face escolhida: índice {best_face_index}, distância {best_distance:.3f}")
-                    
-                    # Só aceita se for parecido o suficiente (threshold equilibrado)
-                    if best_distance >= 0.5:
-                        print(f"Pulando {match['album_filename']} - muito diferente: {best_distance:.3f}")
-                        continue
-                    
-                    # Desenha retângulo só na face que deu match
-                    album_image_with_boxes = draw_specific_face_box(album_path, best_face_location)
-                    album_buffered = io.BytesIO()
-                    album_image_with_boxes.save(album_buffered, format="JPEG")
-                    album_img_str = base64.b64encode(album_buffered.getvalue()).decode()
+                    if match_image is not None:
+                        match_image_rgb = cv2.cvtColor(match_image, cv2.COLOR_BGR2RGB)
+                        
+                        # Desenhar bounding box na face que deu match (vermelho)
+                        match_bbox = result['match_bbox']
+                        x1, y1, x2, y2 = map(int, match_bbox)
+                        cv2.rectangle(match_image_rgb, (x1, y1), (x2, y2), (255, 0, 0), 3)
+                        
+                        # Adicionar texto com similaridade
+                        similarity_text = f"Sim: {result['similarity']:.3f}"
+                        cv2.putText(match_image_rgb, similarity_text, (x1, y1-10), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                        
+                        # Converter para base64
+                        match_pil_image = Image.fromarray(match_image_rgb)
+                        match_buffered = io.BytesIO()
+                        match_pil_image.save(match_buffered, format="JPEG")
+                        match_img_str = base64.b64encode(match_buffered.getvalue()).decode()
                     
                     album_images_with_boxes.append({
-                        'filename': match['album_filename'],
-                        'image_base64': album_img_str,
-                        'confidence': match['confidence'],
-                        'distance': match['distance']
-                    })
+                            'filename': os.path.basename(match_image_path),
+                            'person_id': person_id,
+                            'image_base64': match_img_str,
+                            'confidence': result['confidence'],
+                            'similarity': result['similarity']
+                        })
+                        
                 except Exception as e:
-                    print(f"Erro ao processar {match['album_filename']}: {e}")
+                    logger.error(f"Erro ao processar imagem do match {person_id}: {e}")
+                    continue
             
-            return jsonify({
+            # Preparar resposta
+            response_data = {
                 'success': True,
-                'faces_detected': len(face_locations),
-                'matches': matches,
+                'faces_detected': len(face_data),
+                'matches_found': len(results),
+                'matches': [
+                    {
+                        'person_id': r['person_id'],
+                        'face_id': r.get('face_id', f"{r['person_id']}_face_{r['match_face_index']}"),
+                        'filename': os.path.basename(r['image_path']),
+                        'similarity': r['similarity'],
+                        'confidence': r['confidence']
+                    } for r in results
+                ],
                 'image_with_boxes': img_str,
                 'album_images_with_boxes': album_images_with_boxes
-            })
+            }
+            
+            logger.info(f"✅ Processamento concluído: {len(results)} matches encontrados")
+            return jsonify(response_data)
             
         except Exception as e:
+            logger.error(f"❌ Erro no processamento InsightFace: {e}")
             return jsonify({'error': f'Erro no processamento: {str(e)}'}), 500
         
         finally:
@@ -343,24 +248,231 @@ def upload_file():
     
     return jsonify({'error': 'Tipo de arquivo não permitido'}), 400
 
-@app.route('/album')
-def list_album():
-    """Lista todas as imagens do álbum"""
-    album_files = []
-    for filename in os.listdir(app.config['ALBUM_FOLDER']):
-        if allowed_file(filename):
-            album_files.append(filename)
+@app.route('/health')
+def health_check():
+    """Endpoint de health check"""
+    return jsonify({
+        'status': 'healthy',
+        'engine_available': face_engine is not None,
+        'database_stats': face_engine.get_database_stats() if face_engine else None
+    })
+
+@app.route('/debug_similarity', methods=['POST'])
+def debug_similarity():
+    """Endpoint para debug de similaridade - mostra todos os scores"""
+    if face_engine is None:
+        return jsonify({'error': 'Motor de reconhecimento não disponível'}), 500
     
-    return jsonify({'album_files': album_files})
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        try:
+            logger.info(f"🔍 Debug Similarity: Analisando {filename}")
+            
+            # Buscar faces similares com top_k maior
+            results = face_engine.search_faces(filepath, top_k=50)
+            
+            # Extrair faces da imagem de consulta
+            face_data = face_engine.extract_face_embeddings(filepath)
+            
+            debug_info = {
+                'filename': filename,
+                'faces_detected': len(face_data),
+                'total_results': len(results),
+                'threshold': face_engine.similarity_threshold,
+                'all_scores': []
+            }
+            
+            for i, result in enumerate(results):
+                debug_info['all_scores'].append({
+                    'rank': i + 1,
+                    'person_id': result['person_id'],
+                    'similarity': float(result['similarity']),
+                    'confidence': float(result['confidence']),
+                    'above_threshold': result['similarity'] >= face_engine.similarity_threshold,
+                    'filename': os.path.basename(result['image_path'])
+                })
+            
+            return jsonify(debug_info)
+            
+        except Exception as e:
+            logger.error(f"❌ Erro no debug similarity: {e}")
+            return jsonify({'error': f'Erro no debug: {str(e)}'}), 500
+        
+        finally:
+            # Limpar arquivo temporário
+            if os.path.exists(filepath):
+                os.remove(filepath)
+    
+    return jsonify({'error': 'Tipo de arquivo não permitido'}), 400
 
-@app.route('/album/<filename>')
-def serve_album_image(filename):
-    """Serve imagens do álbum"""
+@app.route('/search_client', methods=['POST'])
+def search_client_faces():
+    """
+    Endpoint específico para fotógrafos - busca faces de um cliente específico
+    com threshold otimizado e votação majoritária
+    """
+    if face_engine is None:
+        return jsonify({'error': 'Motor de reconhecimento não disponível'}), 500
+    
+    if 'file' not in request.files or 'client_id' not in request.form:
+        return jsonify({'error': 'Arquivo e client_id são obrigatórios'}), 400
+    
+    file = request.files['file']
+    client_id = request.form['client_id']
+    
+    if file.filename == '':
+        return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        try:
+            logger.info(f"🔍 Busca específica do cliente {client_id}: {filename}")
+            
+            # Buscar faces do cliente específico
+            results = face_engine.search_client_faces(filepath, client_id, top_k=20)
+            
+            if not results:
+                logger.info(f"❌ Nenhuma face do cliente {client_id} encontrada")
+                return jsonify({
+                    'success': True,
+                    'message': f'Nenhuma foto do cliente {client_id} encontrada',
+                    'client_id': client_id,
+                    'matches': [],
+                    'image_with_boxes': None,
+                    'album_images_with_boxes': []
+                })
+            
+            # Processar imagem original para mostrar faces detectadas
+            image = cv2.imread(filepath)
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Extrair faces da imagem de consulta para desenhar bounding boxes
+            face_data = face_engine.extract_face_embeddings(filepath)
+            
+            # Desenhar bounding boxes nas faces detectadas (verde)
+            for face_info in face_data:
+                bbox = face_info['bbox']
+                x1, y1, x2, y2 = map(int, bbox)
+                cv2.rectangle(image_rgb, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                
+                # Adicionar texto com confiança
+                confidence_text = f"Conf: {face_info['det_score']:.2f}"
+                cv2.putText(image_rgb, confidence_text, (x1, y1-10), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            # Converter para base64
+            pil_image = Image.fromarray(image_rgb)
+            buffered = io.BytesIO()
+            pil_image.save(buffered, format="JPEG")
+            img_str = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Processar imagens dos matches
+            album_images_with_boxes = []
+            seen_persons = set()
+            
+            for result in results:
+                person_id = result['person_id']
+                if person_id in seen_persons:
+                    continue
+                seen_persons.add(person_id)
+                
+                try:
+                    # Carregar imagem do match
+                    match_image_path = result['image_path']
+                    match_image = cv2.imread(match_image_path)
+                    
+                    if match_image is not None:
+                        match_image_rgb = cv2.cvtColor(match_image, cv2.COLOR_BGR2RGB)
+                        
+                        # Desenhar bounding box na face que deu match (vermelho)
+                        match_bbox = result['match_bbox']
+                        x1, y1, x2, y2 = map(int, match_bbox)
+                        cv2.rectangle(match_image_rgb, (x1, y1), (x2, y2), (255, 0, 0), 3)
+                        
+                        # Adicionar texto com similaridade
+                        similarity_text = f"Sim: {result['similarity']:.3f}"
+                        cv2.putText(match_image_rgb, similarity_text, (x1, y1-10), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                        
+                        # Converter para base64
+                        match_pil_image = Image.fromarray(match_image_rgb)
+                        match_buffered = io.BytesIO()
+                        match_pil_image.save(match_buffered, format="JPEG")
+                        match_img_str = base64.b64encode(match_buffered.getvalue()).decode()
+                        
+                        album_images_with_boxes.append({
+                            'filename': os.path.basename(match_image_path),
+                            'person_id': person_id,
+                            'image_base64': match_img_str,
+                            'confidence': result['confidence'],
+                            'similarity': result['similarity']
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Erro ao processar imagem do match {person_id}: {e}")
+                    continue
+            
+            # Preparar resposta
+            response_data = {
+                'success': True,
+                'client_id': client_id,
+                'faces_detected': len(face_data),
+                'matches_found': len(results),
+                'matches': [
+                    {
+                        'person_id': r['person_id'],
+                        'face_id': r.get('face_id', f"{r['person_id']}_face_{r['match_face_index']}"),
+                        'filename': os.path.basename(r['image_path']),
+                        'similarity': r['similarity'],
+                        'confidence': r['confidence']
+                    } for r in results
+                ],
+                'image_with_boxes': img_str,
+                'album_images_with_boxes': album_images_with_boxes
+            }
+            
+            logger.info(f"✅ Busca do cliente {client_id} concluída: {len(results)} matches encontrados")
+            return jsonify(response_data)
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na busca do cliente {client_id}: {e}")
+            return jsonify({'error': f'Erro no processamento: {str(e)}'}), 500
+        
+        finally:
+            # Limpar arquivo temporário
+            if os.path.exists(filepath):
+                os.remove(filepath)
+    
+    return jsonify({'error': 'Tipo de arquivo não permitido'}), 400
+
+@app.route('/client_stats/<client_id>')
+def get_client_stats(client_id):
+    """Endpoint para obter estatísticas de um cliente específico"""
+    if face_engine is None:
+        return jsonify({'error': 'Motor de reconhecimento não disponível'}), 500
+    
     try:
-        return send_from_directory(app.config['ALBUM_FOLDER'], filename)
+        stats = face_engine.get_client_stats(client_id)
+        return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
+        logger.error(f"❌ Erro ao obter estatísticas do cliente {client_id}: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    logger.info("🚀 Iniciando servidor de reconhecimento facial...")
+    logger.info("📊 Sistema: InsightFace + Faiss (Facebook)")
+    logger.info("🌐 Acesse: http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
