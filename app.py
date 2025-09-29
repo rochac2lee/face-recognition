@@ -48,7 +48,7 @@ def initialize_face_engine():
             redis_port=6379,
             redis_db=0,
             # Parâmetros otimizados para fotógrafos
-            adaptive_threshold=False,  # Desabilitar threshold adaptativo para encontrar todas as fotos
+            adaptive_threshold=True,  # Desabilitar threshold adaptativo para encontrar todas as fotos
             majority_vote_k=3,  # Apenas 1 foto necessária para considerar match
             min_det_score=0.2,  # Confiança mínima mais permissiva
             ensemble_models=None  # Pode ser expandido no futuro
@@ -158,11 +158,6 @@ def upload_file():
                 bbox = face_info['bbox']
                 x1, y1, x2, y2 = map(int, bbox)
                 cv2.rectangle(image_rgb, (x1, y1), (x2, y2), (0, 255, 0), 3)
-                
-                # Adicionar texto com confiança
-                confidence_text = f"Conf: {face_info['det_score']:.2f}"
-                cv2.putText(image_rgb, confidence_text, (x1, y1-10), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             # Converter para base64
             pil_image = Image.fromarray(image_rgb)
@@ -227,7 +222,8 @@ def upload_file():
                         'face_id': r.get('face_id', f"{r['person_id']}_face_{r['match_face_index']}"),
                         'filename': os.path.basename(r['image_path']),
                         'similarity': r['similarity'],
-                        'confidence': r['confidence']
+                               'confidence': r['confidence'],
+                               'accuracy': r.get('accuracy', r['confidence'])  # Usar accuracy se disponível, senão confidence
                     } for r in results
                 ],
                 'image_with_boxes': img_str,
@@ -367,11 +363,6 @@ def search_client_faces():
                 bbox = face_info['bbox']
                 x1, y1, x2, y2 = map(int, bbox)
                 cv2.rectangle(image_rgb, (x1, y1), (x2, y2), (0, 255, 0), 3)
-                
-                # Adicionar texto com confiança
-                confidence_text = f"Conf: {face_info['det_score']:.2f}"
-                cv2.putText(image_rgb, confidence_text, (x1, y1-10), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             # Converter para base64
             pil_image = Image.fromarray(image_rgb)
@@ -437,7 +428,8 @@ def search_client_faces():
                         'face_id': r.get('face_id', f"{r['person_id']}_face_{r['match_face_index']}"),
                         'filename': os.path.basename(r['image_path']),
                         'similarity': r['similarity'],
-                        'confidence': r['confidence']
+                               'confidence': r['confidence'],
+                               'accuracy': r.get('accuracy', r['confidence'])  # Usar accuracy se disponível, senão confidence
                     } for r in results
                 ],
                 'image_with_boxes': img_str,
