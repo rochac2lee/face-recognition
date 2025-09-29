@@ -373,8 +373,10 @@ body {
     font-weight: 500;
 }
 
-.match-stat.confidence {
+.match-stat.accuracy {
     background: rgba(16, 185, 129, 0.9);
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .match-stat.similarity {
