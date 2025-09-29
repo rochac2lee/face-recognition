@@ -3,7 +3,7 @@ const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
 const clearBtn = document.getElementById('clearBtn');
-const uploadSection = document.getElementById('uploadSection');
+const unifiedSection = document.getElementById('unifiedSection');
 const resultsSection = document.getElementById('resultsSection');
 const loading = document.getElementById('loading');
 const error = document.getElementById('error');
@@ -68,7 +68,7 @@ function handleFile(file) {
         uploadArea.innerHTML = `
             <div class="upload-content">
                 <div class="image-preview">
-                    <img src="${e.target.result}" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <img src="${e.target.result}" alt="Preview" style="max-width: 100px; max-height: 100px; border-radius: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                     <p style="margin-top: 1rem; color: var(--gray-600);">${file.name}</p>
                 </div>
             </div>
@@ -232,12 +232,17 @@ function hideResults() {
     resultsSection.style.display = 'none';
 }
 
+function showUploadOnly() {
+    resultsSection.style.display = 'none';
+    unifiedSection.scrollIntoView({ behavior: 'smooth' });
+}
+
 function clearAll() {
     selectedFile = null;
     fileInput.value = '';
     uploadBtn.disabled = true;
     hideError();
-    hideResults();
+    showUploadOnly();
     
     // Restaurar upload area
     uploadArea.innerHTML = `
