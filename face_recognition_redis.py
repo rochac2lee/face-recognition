@@ -1,6 +1,6 @@
 """
-Sistema de Reconhecimento Facial com InsightFace + Redis
-Implementação profissional para produção com Redis como banco de dados
+Motor de reconhecimento facial usando InsightFace e Redis
+Faz busca rápida de faces similares em um banco de fotos
 """
 
 import os
@@ -17,14 +17,14 @@ from pathlib import Path
 import pickle
 import base64
 
-# Configurar logging
+# Setup do logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class FaceRecognitionRedis:
     """
-    Motor de reconhecimento facial usando InsightFace para extração de embeddings
-    e Redis + Faiss para armazenamento e busca vetorial ultra-rápida.
+    Classe principal que gerencia reconhecimento facial
+    Usa InsightFace pra extrair características das faces e Redis + Faiss pra busca rápida
     """
     
     def __init__(self, 
@@ -34,44 +34,44 @@ class FaceRecognitionRedis:
                  redis_host: str = 'redis',
                  redis_port: int = 6379,
                  redis_db: int = 0,
-                 # Novos parâmetros para fotógrafos
+                 # Configurações extras
                  adaptive_threshold: bool = True,
-                 majority_vote_k: int = 3,  # Mínimo de k fotos para considerar match
-                 min_det_score: float = 0.4,  # Confiança mínima mais rigorosa
+                 majority_vote_k: int = 3,  # Quantas fotos precisam bater pra considerar match
+                 min_det_score: float = 0.4,  # Confiança mínima da detecção
                  ensemble_models: list = None):
         """
-        Inicializa o motor de reconhecimento facial com Redis.
+        Configura o motor de reconhecimento facial.
         
         Args:
-            model_name: Nome do modelo InsightFace ('buffalo_l', 'buffalo_m', 'buffalo_s')
-            similarity_threshold: Limiar de similaridade base para considerar match (0.0-1.0)
+            model_name: Qual modelo do InsightFace usar ('buffalo_l', 'buffalo_m', 'buffalo_s')
+            similarity_threshold: Quão parecidas as faces precisam ser (0.0-1.0)
             min_face_size: Tamanho mínimo da face em pixels
-            redis_host: Host do Redis
+            redis_host: Onde está o Redis
             redis_port: Porta do Redis
-            redis_db: Database do Redis
-            adaptive_threshold: Se True, usa threshold adaptativo baseado na similaridade intra-classe
-            majority_vote_k: Mínimo de k fotos do mesmo cliente para considerar match válido
-            min_det_score: Confiança mínima da detecção de face (mais rigoroso para fotógrafos)
-            ensemble_models: Lista de modelos para ensemble (opcional)
+            redis_db: Qual database do Redis usar
+            adaptive_threshold: Se usa threshold que se adapta automaticamente
+            majority_vote_k: Quantas fotos do mesmo cliente precisam bater
+            min_det_score: Confiança mínima pra considerar que é uma face
+            ensemble_models: Lista de modelos extras (opcional)
         """
         self.model_name = model_name
         self.similarity_threshold = similarity_threshold
         self.min_face_size = min_face_size
-        self.embedding_dim = 512  # Dimensão dos embeddings do InsightFace
+        self.embedding_dim = 512  # InsightFace sempre gera vetores de 512 dimensões
         
-        # Novos parâmetros para fotógrafos
+        # Configurações extras
         self.adaptive_threshold = adaptive_threshold
         self.majority_vote_k = majority_vote_k
         self.min_det_score = min_det_score
         self.ensemble_models = ensemble_models or []
         
-        # Conectar ao Redis
+        # Conecta no Redis
         try:
             self.redis_client = redis.Redis(
                 host=redis_host, 
                 port=redis_port, 
                 db=redis_db,
-                decode_responses=False  # Para trabalhar com dados binários
+                decode_responses=False  # Precisa disso pra trabalhar com dados binários
             )
             self.redis_client.ping()
             logger.info(f"✅ Conectado ao Redis em {redis_host}:{redis_port}")
@@ -79,77 +79,77 @@ class FaceRecognitionRedis:
             logger.error(f"❌ Erro ao conectar ao Redis: {e}")
             raise
         
-        # Inicializar InsightFace
+        # Carrega o modelo InsightFace
         self.app = insightface.app.FaceAnalysis(
             name=model_name,
             providers=['CPUExecutionProvider']
         )
         self.app.prepare(ctx_id=0, det_size=(320, 320))
         
-        # L2 Normalizer para embeddings (baseado no artigo)
+        # Normalizador L2 pra embeddings (melhora a busca)
         from sklearn.preprocessing import normalize
         self.l2_normalizer = normalize
         
-        # Inicializar Faiss
+        # Cria o índice Faiss pra busca rápida
         self.face_index = faiss.IndexFlatIP(self.embedding_dim)
         
-        # Carregar dados do Redis se existirem
+        # Tenta carregar dados que já existem no Redis
         self._load_from_redis()
         
         logger.info(f"🚀 FaceRecognitionRedis inicializado com modelo {model_name}")
         logger.info(f"📊 Faces no banco: {self.face_index.ntotal}")
 
     def _load_from_redis(self):
-        """Carrega o índice Faiss e metadados do Redis."""
+        """Tenta carregar o índice Faiss que já existe no Redis."""
         try:
-            # Carregar índice Faiss
+            # Pega o índice Faiss do Redis
             index_data = self.redis_client.get('face_index')
             if index_data:
-                # Converter bytes para numpy array se necessário
+                # Converte bytes pra numpy array se precisar
                 if isinstance(index_data, bytes):
                     index_data = np.frombuffer(index_data, dtype=np.uint8)
                 self.face_index = faiss.deserialize_index(index_data)
-                logger.info(f"📥 Índice Faiss carregado do Redis: {self.face_index.ntotal} faces")
+                logger.info(f"📥 Carregou índice do Redis: {self.face_index.ntotal} faces")
             else:
-                logger.info("📝 Novo índice Faiss criado")
+                logger.info("📝 Criando novo índice Faiss")
                 
         except Exception as e:
             logger.error(f"❌ Erro ao carregar do Redis: {e}")
             self.face_index = faiss.IndexFlatIP(self.embedding_dim)
 
     def _save_to_redis(self):
-        """Salva o índice Faiss no Redis."""
+        """Salva o índice Faiss atualizado no Redis."""
         try:
-            # Serializar e salvar índice Faiss
+            # Serializa e salva o índice Faiss
             index_data = faiss.serialize_index(self.face_index)
-            # Converter para bytes se necessário
+            # Converte pra bytes se precisar
             if isinstance(index_data, np.ndarray):
                 index_data = index_data.tobytes()
             self.redis_client.set('face_index', index_data)
-            logger.info(f"💾 Índice Faiss salvo no Redis: {self.face_index.ntotal} faces")
+            logger.info(f"💾 Salvou índice no Redis: {self.face_index.ntotal} faces")
         except Exception as e:
             logger.error(f"❌ Erro ao salvar no Redis: {e}")
 
     def _preprocess_image(self, image_path: str) -> np.ndarray:
         """
-        Pré-processa a imagem para melhor detecção de faces.
+        Melhora a qualidade da imagem pra detectar faces melhor.
         
         Args:
-            image_path: Caminho para a imagem
+            image_path: Caminho da imagem
             
         Returns:
-            Imagem pré-processada como array numpy
+            Imagem melhorada como array numpy
         """
         try:
-            # Carregar imagem
+            # Carrega a imagem
             image = cv2.imread(image_path)
             if image is None:
-                raise ValueError(f"Não foi possível carregar a imagem: {image_path}")
+                raise ValueError(f"Não conseguiu carregar a imagem: {image_path}")
             
-            # Converter BGR para RGB
+            # Converte BGR pra RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            # Aplicar melhorias de qualidade
+            # Melhora o contraste da imagem
             lab = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2LAB)
             l, a, b = cv2.split(lab)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -165,21 +165,21 @@ class FaceRecognitionRedis:
 
     def extract_face_embeddings(self, image_path: str) -> List[Dict]:
         """
-        Extrai embeddings de todas as faces encontradas na imagem.
+        Pega as características (embeddings) de todas as faces da imagem.
         
         Args:
-            image_path: Caminho para a imagem
+            image_path: Caminho da imagem
             
         Returns:
-            Lista de dicionários com informações das faces e embeddings
+            Lista com informações de cada face encontrada
         """
         try:
-            # Pré-processar imagem
+            # Melhora a imagem primeiro
             image = self._preprocess_image(image_path)
             if image is None:
                 return []
             
-            # Detectar faces com InsightFace
+            # Detecta faces com InsightFace
             faces = self.app.get(image)
             
             if not faces:
@@ -188,7 +188,7 @@ class FaceRecognitionRedis:
             
             face_data = []
             for i, face in enumerate(faces):
-                # Verificar tamanho da face
+                # Checa se a face não é muito pequena
                 bbox = face.bbox
                 face_width = bbox[2] - bbox[0]
                 face_height = bbox[3] - bbox[1]
@@ -197,12 +197,12 @@ class FaceRecognitionRedis:
                     logger.warning(f"⚠️ Face {i} muito pequena: {face_width}x{face_height}")
                     continue
                 
-                # Verificar confiança da detecção
+                # Checa se a detecção tem confiança suficiente
                 if face.det_score < 0.05:
                     logger.warning(f"⚠️ Face {i} com baixa confiança: {face.det_score}")
                     continue
                 
-                # Normalizar embedding (L2 normalization para similaridade coseno)
+                # Normaliza o embedding (L2 normalization pra similaridade coseno)
                 embedding = face.embedding
                 embedding = embedding / np.linalg.norm(embedding)
                 
@@ -225,15 +225,15 @@ class FaceRecognitionRedis:
 
     def add_faces_to_database(self, image_path: str, person_id: str = None) -> int:
         """
-        Adiciona faces de uma imagem ao banco de dados Redis.
-        Suporta múltiplas faces por imagem.
+        Adiciona faces de uma foto no banco de dados.
+        Pode ter várias faces numa foto só.
         
         Args:
-            image_path: Caminho para a imagem
-            person_id: ID base da pessoa (se None, usa o nome do arquivo)
+            image_path: Caminho da foto
+            person_id: ID da pessoa (se None, usa o nome do arquivo)
             
         Returns:
-            Número de faces adicionadas
+            Quantas faces foram adicionadas
         """
         if person_id is None:
             person_id = Path(image_path).stem
@@ -246,31 +246,31 @@ class FaceRecognitionRedis:
         
         added_count = 0
         for face_info in face_data:
-            # Criar ID único para cada face
+            # Cria ID único pra cada face
             face_id = f"{person_id}_face_{face_info['face_index']}"
             
-            # Adicionar embedding ao índice Faiss
+            # Adiciona o embedding no índice Faiss
             embedding = face_info['embedding'].reshape(1, -1).astype('float32')
             self.face_index.add(embedding)
             
-            # Preparar metadados
+            # Prepara os metadados
             metadata = {
                 'person_id': person_id,
                 'face_id': face_id,
                 'image_path': image_path,
-                'bbox': face_info['bbox'].tolist(),  # Converter numpy array para lista
+                'bbox': face_info['bbox'].tolist(),  # Converte numpy array pra lista
                 'det_score': float(face_info['det_score']),
                 'face_index': int(face_info['face_index']),
                 'index_id': int(self.face_index.ntotal - 1)
             }
             
-            # Salvar metadados no Redis
+            # Salva metadados no Redis
             metadata_key = f"face_metadata:{metadata['index_id']}"
             self.redis_client.set(metadata_key, json.dumps(metadata))
             
             added_count += 1
         
-        # Salvar índice atualizado no Redis
+        # Salva o índice atualizado no Redis
         self._save_to_redis()
         
         logger.info(f"✅ Adicionadas {added_count} faces de {image_path} ao banco Redis")
@@ -278,24 +278,24 @@ class FaceRecognitionRedis:
 
     def build_database_from_folder(self, folder_path: str) -> Dict[str, int]:
         """
-        Constrói o banco de dados a partir de uma pasta de imagens.
+        Monta o banco de dados processando todas as fotos de uma pasta.
         
         Args:
-            folder_path: Caminho para a pasta com imagens
+            folder_path: Caminho da pasta com as fotos
             
         Returns:
-            Dicionário com estatísticas de processamento
+            Estatísticas do que foi processado
         """
         folder_path = Path(folder_path)
         if not folder_path.exists():
             raise ValueError(f"Pasta não encontrada: {folder_path}")
         
-        # Encontrar todas as imagens
+        # Acha todas as fotos
         image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
         image_files = [f for f in folder_path.rglob('*') if f.suffix.lower() in image_extensions]
         
         if not image_files:
-            raise ValueError(f"Nenhuma imagem encontrada em {folder_path}")
+            raise ValueError(f"Nenhuma foto encontrada em {folder_path}")
         
         stats = {
             'total_images': len(image_files),
@@ -304,7 +304,7 @@ class FaceRecognitionRedis:
             'failed_images': 0
         }
         
-        logger.info(f"🏗️ Processando {len(image_files)} imagens...")
+        logger.info(f"🏗️ Processando {len(image_files)} fotos...")
         
         for image_file in image_files:
             try:
@@ -326,11 +326,11 @@ class FaceRecognitionRedis:
 
     def search_faces(self, image_path: str, top_k: int = 10) -> List[Dict]:
         """
-        Busca faces similares no banco de dados Redis.
+        Busca faces parecidas no banco de dados.
         
         Args:
-            image_path: Caminho para a imagem de consulta
-            top_k: Número de resultados a retornar
+            image_path: Caminho da foto pra buscar
+            top_k: Quantos resultados retornar
             
         Returns:
             Lista de resultados ordenados por similaridade
@@ -339,34 +339,34 @@ class FaceRecognitionRedis:
             logger.warning("⚠️ Banco de dados vazio")
             return []
         
-        # Extrair embeddings da imagem de consulta com filtragem aprimorada
+        # Pega as faces da foto com filtragem melhorada
         face_data = self.extract_face_embeddings(image_path)
         face_data = self.enhanced_face_filtering(face_data)
         
         if not face_data:
-            logger.warning(f"⚠️ Nenhuma face válida detectada na imagem de consulta: {image_path}")
+            logger.warning(f"⚠️ Nenhuma face válida detectada na foto: {image_path}")
             return []
         
         all_results = []
         
         for face_info in face_data:
-            # Buscar no índice Faiss
+            # Busca no índice Faiss
             query_embedding = face_info['embedding'].reshape(1, -1).astype('float32')
             similarities, indices = self.face_index.search(query_embedding, min(top_k, self.face_index.ntotal))
             
-            # Processar resultados
+            # Processa os resultados
             for similarity, idx in zip(similarities[0], indices[0]):
                 if idx == -1:  # Índice inválido
                     continue
                 
                 if similarity >= self.similarity_threshold:
-                    # Carregar metadados do Redis
+                    # Carrega metadados do Redis
                     metadata_key = f"face_metadata:{idx}"
                     metadata_json = self.redis_client.get(metadata_key)
                     
                     if metadata_json:
                         metadata = json.loads(metadata_json)
-                        # Converter similaridade para acurácia mais realista
+                        # Converte similaridade pra acurácia mais realista
                         accuracy = self.similarity_to_accuracy(float(similarity))
                         
                         result = {
