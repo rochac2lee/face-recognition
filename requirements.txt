@@ -1,6 +1,10 @@
 Flask==2.3.3
 opencv-python==4.8.1.78
-face-recognition==1.3.0
 Pillow==10.0.1
 numpy==1.24.3
 Werkzeug==2.3.7
+insightface==0.7.3
+faiss-cpu==1.7.4
+onnxruntime==1.16.3
+scikit-learn==1.3.2
+redis==5.0.1
