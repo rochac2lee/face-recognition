@@ -1,260 +1,261 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const resultsSection = document.getElementById('resultsSection');
-    const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    const errorMessage = document.getElementById('errorMessage');
-    const resultImage = document.getElementById('resultImage');
-    const matchesList = document.getElementById('matchesList');
+// Elementos DOM
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const clearBtn = document.getElementById('clearBtn');
+const uploadSection = document.getElementById('uploadSection');
+const resultsSection = document.getElementById('resultsSection');
+const loading = document.getElementById('loading');
+const error = document.getElementById('error');
+const errorMessage = document.getElementById('errorMessage');
+const resultImage = document.getElementById('resultImage');
+const matchesList = document.getElementById('matchesList');
+const matchesCount = document.getElementById('matchesCount');
+const resultsStats = document.getElementById('resultsStats');
 
-    let selectedFile = null;
+let selectedFile = null;
 
-    // Event listeners para drag and drop
-    uploadArea.addEventListener('click', () => fileInput.click());
-    uploadArea.addEventListener('dragover', handleDragOver);
-    uploadArea.addEventListener('dragleave', handleDragLeave);
-    uploadArea.addEventListener('drop', handleDrop);
+// Event Listeners
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', handleDragOver);
+uploadArea.addEventListener('dragleave', handleDragLeave);
+uploadArea.addEventListener('drop', handleDrop);
+fileInput.addEventListener('change', handleFileSelect);
+uploadBtn.addEventListener('click', uploadFile);
+clearBtn.addEventListener('click', clearAll);
 
-    fileInput.addEventListener('change', handleFileSelect);
-    uploadBtn.addEventListener('click', uploadFile);
-    clearBtn.addEventListener('click', clearAll);
+// Drag and Drop
+function handleDragOver(e) {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+}
 
-    function handleDragOver(e) {
-        e.preventDefault();
-        uploadArea.classList.add('dragover');
+function handleDragLeave(e) {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFile(files[0]);
     }
+}
 
-    function handleDragLeave(e) {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
+// File Selection
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        handleFile(file);
     }
+}
 
-    function handleDrop(e) {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
+function handleFile(file) {
+    if (!isValidImage(file)) {
+        showError('Por favor, selecione um arquivo de imagem válido (JPG, PNG, GIF)');
+        return;
     }
-
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (file) {
-            handleFile(file);
-        }
-    }
-
-    function handleFile(file) {
-        // Validar tipo de arquivo
-        if (!file.type.startsWith('image/')) {
-            showError('Por favor, selecione apenas arquivos de imagem.');
-            return;
-        }
-
-        // Validar tamanho (16MB)
-        if (file.size > 16 * 1024 * 1024) {
-            showError('O arquivo é muito grande. Tamanho máximo: 16MB.');
-            return;
-        }
-
-        selectedFile = file;
-        uploadBtn.disabled = false;
-        
-        // Mostrar preview da imagem
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            uploadArea.innerHTML = `
-                <div class="upload-content">
-                    <img src="${e.target.result}" style="max-width: 200px; max-height: 200px; border-radius: 10px; margin-bottom: 15px;">
-                    <h3>Imagem selecionada: ${file.name}</h3>
-                    <p>Clique em "Buscar no Álbum" para processar</p>
-                </div>
-            `;
-        };
-        reader.readAsDataURL(file);
-    }
-
-    async function uploadFile() {
-        if (!selectedFile) {
-            showError('Por favor, selecione uma imagem primeiro.');
-            return;
-        }
-
-        hideError();
-        showLoading();
-
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-
-        try {
-            const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                showResults(data);
-            } else {
-                showError(data.error || 'Erro desconhecido ocorreu.');
-            }
-        } catch (err) {
-            showError('Erro de conexão. Tente novamente.');
-            console.error('Erro:', err);
-        } finally {
-            hideLoading();
-        }
-    }
-
-    function showResults(data) {
-        // Mostrar imagem com detecção
-        resultImage.src = 'data:image/jpeg;base64,' + data.image_with_boxes;
-        
-        // Mostrar correspondências
-        matchesList.innerHTML = '';
-        
-        if (data.album_images_with_boxes && data.album_images_with_boxes.length > 0) {
-            data.album_images_with_boxes.forEach((albumImage, index) => {
-                const imgElement = document.createElement('img');
-                imgElement.src = `data:image/jpeg;base64,${albumImage.image_base64}`;
-                imgElement.alt = `Correspondência ${index + 1}`;
-                imgElement.className = 'album-match-image';
-                imgElement.title = `Confiança: ${(albumImage.confidence * 100).toFixed(1)}% - Clique para ampliar`;
-                
-                matchesList.appendChild(imgElement);
-                
-                // Adicionar evento de clique na imagem
-                const title = `Correspondência ${index + 1}`;
-                const details = `
-                    <strong>Arquivo:</strong> ${albumImage.filename}<br>
-                    <strong>Confiança:</strong> ${(albumImage.confidence * 100).toFixed(1)}%<br>
-                    <strong>Distância:</strong> ${albumImage.distance.toFixed(3)}
-                `;
-                makeImageClickable(imgElement, title, details);
-            });
-        } else {
-            matchesList.innerHTML = '<p style="text-align: center; color: #666; font-style: italic;">Nenhuma correspondência encontrada no álbum.</p>';
-        }
-
-        // Mostrar estatísticas simples
-        const statsElement = document.createElement('p');
-        statsElement.className = 'stats-info';
-        statsElement.innerHTML = `
-            <strong>Faces detectadas:</strong> ${data.faces_detected} | 
-            <strong>Correspondências:</strong> ${data.album_images_with_boxes ? data.album_images_with_boxes.length : 0}
-        `;
-        matchesList.insertBefore(statsElement, matchesList.firstChild);
-
-        // Adicionar evento de clique na imagem enviada
-        const uploadedImageTitle = 'Imagem Enviada';
-        const uploadedImageDetails = `
-            <strong>Faces detectadas:</strong> ${data.faces_detected}<br>
-            <strong>Correspondências:</strong> ${data.album_images_with_boxes ? data.album_images_with_boxes.length : 0}<br>
-            <em>💡 Clique na imagem para ver em tela cheia</em>
-        `;
-        makeImageClickable(resultImage, uploadedImageTitle, uploadedImageDetails);
-
-        resultsSection.style.display = 'block';
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function clearAll() {
-        selectedFile = null;
-        uploadBtn.disabled = true;
-        resultsSection.style.display = 'none';
-        hideError();
-        
-        // Restaurar upload area original
+    
+    selectedFile = file;
+    uploadBtn.disabled = false;
+    
+    // Preview da imagem
+    const reader = new FileReader();
+    reader.onload = (e) => {
         uploadArea.innerHTML = `
             <div class="upload-content">
-                <div class="upload-icon">📷</div>
-                <h3>Arraste e solte uma imagem aqui</h3>
-                <p>ou clique para selecionar</p>
+                <div class="image-preview">
+                    <img src="${e.target.result}" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <p style="margin-top: 1rem; color: var(--gray-600);">${file.name}</p>
+                </div>
             </div>
         `;
+    };
+    reader.readAsDataURL(file);
+}
+
+function isValidImage(file) {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    return validTypes.includes(file.type);
+}
+
+// Upload
+async function uploadFile() {
+    if (!selectedFile) {
+        showError('Por favor, selecione uma imagem primeiro');
+        return;
+    }
+    
+    showLoading();
+    hideError();
+    hideResults();
+    
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
         
-        fileInput.value = '';
-    }
-
-    function showLoading() {
-        loading.style.display = 'block';
-        uploadBtn.disabled = true;
-    }
-
-    function hideLoading() {
-        loading.style.display = 'none';
-        uploadBtn.disabled = !selectedFile;
-    }
-
-    function showError(message) {
-        errorMessage.textContent = message;
-        error.style.display = 'block';
-        error.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function hideError() {
-        error.style.display = 'none';
-    }
-
-    // Funcionalidade do modal de tela cheia
-    function setupFullscreenModal() {
-        const modal = document.getElementById('fullscreenModal');
-        const modalImg = document.getElementById('fullscreenImage');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalDetails = document.getElementById('modalDetails');
-        const closeBtn = document.querySelector('.close');
-
-        // Função para abrir modal
-        function openModal(imgSrc, title, details) {
-            modalImg.src = imgSrc;
-            modalTitle.textContent = title;
-            modalDetails.innerHTML = details;
-            modal.style.display = 'block';
-            document.body.style.overflow = 'hidden'; // Impede scroll do body
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
-        // Função para fechar modal
-        function closeModal() {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto'; // Reabilita scroll do body
-        }
-
-        // Event listeners
-        closeBtn.addEventListener('click', closeModal);
         
-        // Fechar com clique no fundo
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                closeModal();
+        const data = await response.json();
+        hideLoading();
+        
+        if (data.success) {
+            if (data.matches && data.matches.length > 0) {
+                showResults(data);
+            } else {
+                showError(data.message || 'Nenhuma correspondência encontrada');
             }
-        });
-
-        // Fechar com ESC
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && modal.style.display === 'block') {
-                closeModal();
-            }
-        });
-
-        return { openModal, closeModal };
+        } else {
+            showError(data.error || 'Erro no processamento');
+        }
+    } catch (error) {
+        hideLoading();
+        showError('Erro na comunicação com o servidor: ' + error.message);
     }
+}
 
-    // Configurar modal na inicialização
-    const modalController = setupFullscreenModal();
-
-    // Adicionar funcionalidade para imagens clicáveis
-    function makeImageClickable(imgElement, title, details) {
-        imgElement.addEventListener('click', function() {
-            modalController.openModal(imgElement.src, title, details);
-        });
+// Display Results
+function showResults(data) {
+    // Mostrar imagem enviada
+    if (data.image_with_boxes) {
+        resultImage.src = 'data:image/jpeg;base64,' + data.image_with_boxes;
     }
+    
+    // Atualizar estatísticas
+    const stats = `${data.faces_detected} face(s) detectada(s) • ${data.matches_found} correspondência(s) encontrada(s)`;
+    resultsStats.textContent = stats;
+    matchesCount.textContent = `${data.matches_found} fotos`;
+    
+    // Limpar matches anteriores
+    matchesList.innerHTML = '';
+    
+    // Criar cards para cada match
+    data.matches.forEach((match, index) => {
+        const matchCard = createMatchCard(match, index);
+        matchesList.appendChild(matchCard);
+    });
+    
+    // Mostrar seção de resultados
+    resultsSection.style.display = 'block';
+    resultsSection.scrollIntoView({ behavior: 'smooth' });
+}
 
-    // Expor função globalmente para uso nas outras funções
-    window.makeImageClickable = makeImageClickable;
+function createMatchCard(match, index) {
+    const card = document.createElement('div');
+    card.className = 'match-card';
+    
+    const confidence = typeof match.confidence === 'number' ? match.confidence.toFixed(1) : 'N/A';
+    const similarity = typeof match.similarity === 'number' ? match.similarity.toFixed(3) : 'N/A';
+    
+    card.innerHTML = `
+        <img src="/album/${match.filename}" alt="Match ${index + 1}" class="match-image" loading="lazy">
+        <div class="match-overlay">
+            <div class="match-stats">
+                <span class="match-stat confidence">${confidence}%</span>
+                <span class="match-stat similarity">${similarity}</span>
+            </div>
+        </div>
+    `;
+    
+    // Adicionar evento de clique para ampliar
+    card.addEventListener('click', () => {
+        openImageModal(`/album/${match.filename}`, match);
+    });
+    
+    return card;
+}
+
+function openImageModal(imageSrc, matchData) {
+    // Criar modal simples
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        cursor: pointer;
+    `;
+    
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.style.cssText = `
+        max-width: 90%;
+        max-height: 90%;
+        border-radius: 8px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    `;
+    
+    modal.appendChild(img);
+    document.body.appendChild(modal);
+    
+    modal.addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// UI Helpers
+function showLoading() {
+    loading.style.display = 'block';
+    uploadBtn.disabled = true;
+}
+
+function hideLoading() {
+    loading.style.display = 'none';
+    uploadBtn.disabled = false;
+}
+
+function showError(message) {
+    errorMessage.textContent = message;
+    error.style.display = 'flex';
+}
+
+function hideError() {
+    error.style.display = 'none';
+}
+
+function hideResults() {
+    resultsSection.style.display = 'none';
+}
+
+function clearAll() {
+    selectedFile = null;
+    fileInput.value = '';
+    uploadBtn.disabled = true;
+    hideError();
+    hideResults();
+    
+    // Restaurar upload area
+    uploadArea.innerHTML = `
+        <div class="upload-content">
+            <div class="upload-placeholder">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                </svg>
+                <span>Clique aqui ou arraste uma imagem</span>
+            </div>
+        </div>
+    `;
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Face Recognition AI - Interface carregada');
 });
