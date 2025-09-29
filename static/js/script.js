@@ -68,8 +68,8 @@ function handleFile(file) {
         uploadArea.innerHTML = `
             <div class="upload-content">
                 <div class="image-preview">
-                    <img src="${e.target.result}" alt="Preview" style="width: 100px; max-height: 100px; border-radius: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                    <p style="margin-top: 1rem; font-size: 24px; color: var(--gray-600);">${file.name}</p>
+                    <img src="${e.target.result}" alt="Preview" style="width: 48px; max-height: 48px; border-radius: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <p style="margin-top: 1rem; font-size: 18px; color: var(--gray-500);">${file.name}</p>
                 </div>
             </div>
         `;
