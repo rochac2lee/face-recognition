@@ -154,15 +154,14 @@ function createMatchCard(match, index) {
     const card = document.createElement('div');
     card.className = 'match-card';
     
-    const confidence = typeof match.confidence === 'number' ? match.confidence.toFixed(1) : 'N/A';
-    const similarity = typeof match.similarity === 'number' ? match.similarity.toFixed(3) : 'N/A';
+                       const accuracy = typeof match.accuracy === 'number' ? match.accuracy.toFixed(1) : 
+                                        (typeof match.confidence === 'number' ? match.confidence.toFixed(1) : 'N/A');
     
     card.innerHTML = `
         <img src="/album/${match.filename}" alt="Match ${index + 1}" class="match-image" loading="lazy">
         <div class="match-overlay">
             <div class="match-stats">
-                <span class="match-stat confidence">${confidence}%</span>
-                <span class="match-stat similarity">${similarity}</span>
+                <span class="match-stat accuracy">${accuracy}%</span>
             </div>
         </div>
     `;
