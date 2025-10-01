@@ -341,15 +341,9 @@ body {
 
 .matches-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: end;
     align-items: center;
     margin-bottom: 1.5rem;
-}
-
-.matches-header h3 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--gray-900);
 }
 
 .matches-count {
