@@ -42,14 +42,14 @@ def initialize_face_engine():
         logger.info("🚀 Inicializando motor de reconhecimento facial...")
         face_engine = FaceRecognitionRedis(
             model_name='buffalo_l',
-            similarity_threshold=0.32,  # Threshold base muito mais flexível
+            similarity_threshold=0.25,  # Threshold mais flexível para encontrar mais matches
             min_face_size=5,  # Tamanho mínimo balanceado
             redis_host='redis',
             redis_port=6379,
             redis_db=0,
             # Parâmetros otimizados para fotógrafos
             adaptive_threshold=False,  # Desabilitar threshold adaptativo para encontrar todas as fotos
-            majority_vote_k=3,  # Apenas 1 foto necessária para considerar match
+            majority_vote_k=1,  # Apenas 1 foto necessária para considerar match
             min_det_score=0.2,  # Confiança mínima mais permissiva
             ensemble_models=None  # Pode ser expandido no futuro
         )

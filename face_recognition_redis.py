@@ -197,8 +197,8 @@ class FaceRecognitionRedis:
                     logger.warning(f"⚠️ Face {i} muito pequena: {face_width}x{face_height}")
                     continue
                 
-                # Checa se a detecção tem confiança suficiente
-                if face.det_score < 0.05:
+                # Checa se a detecção tem confiança suficiente (mais permissivo)
+                if face.det_score < 0.01:
                     logger.warning(f"⚠️ Face {i} com baixa confiança: {face.det_score}")
                     continue
                 
@@ -629,8 +629,14 @@ class FaceRecognitionRedis:
                     logger.info(f"✅ {person_id}: {len(valid_matches)}/{len(person_results)} fotos passaram "
                               f"no threshold {adaptive_thresh:.3f} (k={self.majority_vote_k})")
                 else:
-                    logger.info(f"❌ {person_id}: Apenas {len(valid_matches)}/{len(person_results)} fotos passaram "
-                              f"no threshold {adaptive_thresh:.3f} (necessário: {self.majority_vote_k})")
+                    # Se não há votação majoritária suficiente, incluir o melhor match mesmo assim
+                    if person_results and person_results[0]['similarity'] >= self.similarity_threshold:
+                        filtered_results.append(person_results[0])
+                        logger.info(f"⚠️ {person_id}: Apenas {len(valid_matches)}/{len(person_results)} fotos passaram "
+                                  f"no threshold adaptativo, mas incluindo melhor match com threshold base")
+                    else:
+                        logger.info(f"❌ {person_id}: Apenas {len(valid_matches)}/{len(person_results)} fotos passaram "
+                                  f"no threshold {adaptive_thresh:.3f} (necessário: {self.majority_vote_k})")
             
             return filtered_results
             
