@@ -3,3 +3,4 @@ uploads/*
 *.jpg
 *.png
 .cursor/
+.env
