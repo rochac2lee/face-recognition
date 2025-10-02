@@ -276,6 +276,61 @@ class FaceRecognitionRedis:
         logger.info(f"✅ Adicionadas {added_count} faces de {image_path} ao banco Redis")
         return added_count
 
+    def add_faces_to_database_with_s3_path(self, temp_image_path: str, s3_image_path: str, person_id: str = None) -> int:
+        """
+        Adiciona faces de uma foto do S3 no banco de dados.
+        Usa o arquivo temporário para processamento, mas salva o caminho S3 real.
+        
+        Args:
+            temp_image_path: Caminho do arquivo temporário baixado do S3
+            s3_image_path: Caminho real da imagem no S3 (ex: "1/album/IMG_1842.jpeg")
+            person_id: ID da pessoa (se None, usa o nome do arquivo)
+            
+        Returns:
+            Quantas faces foram adicionadas
+        """
+        if person_id is None:
+            person_id = Path(s3_image_path).stem
+        
+        # Extrair embeddings do arquivo temporário
+        face_data = self.extract_face_embeddings(temp_image_path)
+        
+        if not face_data:
+            logger.warning(f"⚠️ Nenhuma face válida encontrada em {s3_image_path}")
+            return 0
+        
+        added_count = 0
+        for face_info in face_data:
+            # Cria ID único pra cada face
+            face_id = f"{person_id}_face_{face_info['face_index']}"
+            
+            # Adiciona o embedding no índice Faiss
+            embedding = face_info['embedding'].reshape(1, -1).astype('float32')
+            self.face_index.add(embedding)
+            
+            # Prepara os metadados com o caminho S3 real
+            metadata = {
+                'person_id': person_id,
+                'face_id': face_id,
+                'image_path': s3_image_path,  # Usar caminho S3 real
+                'bbox': face_info['bbox'].tolist(),  # Converte numpy array pra lista
+                'det_score': float(face_info['det_score']),
+                'face_index': int(face_info['face_index']),
+                'index_id': int(self.face_index.ntotal - 1)
+            }
+            
+            # Salva metadados no Redis
+            metadata_key = f"face_metadata:{metadata['index_id']}"
+            self.redis_client.set(metadata_key, json.dumps(metadata))
+            
+            added_count += 1
+        
+        # Salva o índice atualizado no Redis
+        self._save_to_redis()
+        
+        logger.info(f"✅ Adicionadas {added_count} faces de {s3_image_path} ao banco Redis")
+        return added_count
+
     def build_database_from_folder(self, folder_path: str) -> Dict[str, int]:
         """
         Monta o banco de dados processando todas as fotos de uma pasta.
@@ -438,61 +493,6 @@ class FaceRecognitionRedis:
             'images_with_multiple_faces': multiple_faces_count,
             'images_with_single_face': len(images_face_count) - multiple_faces_count
         }
-
-    def clear_database(self):
-        """Limpa o banco de dados Redis."""
-        try:
-            # Limpar índice Faiss
-            self.face_index = faiss.IndexFlatIP(self.embedding_dim)
-            
-            # Limpar metadados no Redis
-            keys = self.redis_client.keys('face_metadata:*')
-            if keys:
-                self.redis_client.delete(*keys)
-            
-            # Limpar índice no Redis
-            self.redis_client.delete('face_index')
-            
-            logger.info("🗑️ Banco de dados Redis limpo")
-        except Exception as e:
-            logger.error(f"❌ Erro ao limpar banco Redis: {e}")
-
-    def remove_person(self, person_id: str) -> int:
-        """
-        Remove todas as faces de uma pessoa do banco Redis.
-        
-        Args:
-            person_id: ID da pessoa a remover
-            
-        Returns:
-            Número de faces removidas
-        """
-        try:
-            removed_count = 0
-            
-            # Encontrar e remover metadados da pessoa
-            for i in range(self.face_index.ntotal):
-                metadata_key = f"face_metadata:{i}"
-                metadata_json = self.redis_client.get(metadata_key)
-                
-                if metadata_json:
-                    metadata = json.loads(metadata_json)
-                    if metadata['person_id'] == person_id:
-                        self.redis_client.delete(metadata_key)
-                        removed_count += 1
-            
-            if removed_count > 0:
-                # Reconstruir índice sem as faces removidas
-                self._rebuild_index()
-                logger.info(f"✅ Removidas {removed_count} faces de {person_id}")
-            else:
-                logger.warning(f"⚠️ Pessoa {person_id} não encontrada no banco")
-            
-            return removed_count
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao remover pessoa {person_id}: {e}")
-            return 0
 
     def _rebuild_index(self):
         """Reconstrói o índice Faiss a partir dos metadados no Redis."""
