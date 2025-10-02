@@ -1,18 +1,18 @@
-# 🎯 Sistema de Reconhecimento Facial Profissional
+# Sistema de Reconhecimento Facial
 
-Sistema avançado de reconhecimento facial desenvolvido com **InsightFace**, **Faiss (Facebook)** e **Redis** para alta precisão e performance. Ideal para fotógrafos, estúdios e aplicações que precisam identificar pessoas em grandes coleções de fotos.
+Sistema de reconhecimento facial desenvolvido com InsightFace, Faiss e Redis para alta precisão e performance. Ideal para fotógrafos, estúdios e aplicações que precisam identificar pessoas em grandes coleções de fotos.
 
-## ✨ Características Principais
+## Características Principais
 
-- 🔍 **Alta Precisão**: Utiliza InsightFace com modelo Buffalo-L para detecção facial avançada
-- ⚡ **Performance Otimizada**: Faiss (Facebook) para busca vetorial ultra-rápida
-- 🚀 **Escalabilidade**: Redis para cache e gerenciamento de dados
-- 🎨 **Interface Moderna**: Interface web responsiva e intuitiva
-- 📱 **Drag & Drop**: Upload fácil de imagens
-- 🔄 **Tempo Real**: Processamento instantâneo com feedback visual
-- ☁️ **S3 Opcional**: Integração opcional com AWS S3 como diferencial
+- **Alta Precisão**: Utiliza InsightFace com modelo Buffalo-L para detecção facial avançada
+- **Performance Otimizada**: Faiss (Facebook) para busca vetorial ultra-rápida
+- **Escalabilidade**: Redis para cache e gerenciamento de dados
+- **Interface Moderna**: Interface web responsiva e intuitiva
+- **Drag & Drop**: Upload fácil de imagens
+- **Tempo Real**: Processamento instantâneo com feedback visual
+- **S3 Opcional**: Integração opcional com AWS S3 como diferencial
 
-## 🏗️ Arquitetura do Sistema
+## Arquitetura do Sistema
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -28,7 +28,7 @@ Sistema avançado de reconhecimento facial desenvolvido com **InsightFace**, **F
                        └─────────────────┘
 ```
 
-## 🚀 Instalação e Configuração
+## Instalação e Configuração
 
 ### Pré-requisitos
 
@@ -71,7 +71,7 @@ docker run -d -p 6379:6379 redis:7-alpine
 python app.py
 ```
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 face-recognition/
@@ -89,7 +89,7 @@ face-recognition/
 └── S3_SETUP.md         # Guia de configuração S3
 ```
 
-## 🎮 Como Usar o Sistema
+## Como Usar o Sistema
 
 ### 1. Preparar o Banco de Dados
 
@@ -128,7 +128,7 @@ album/
 - **Precisão**: Percentual de confiança (0-100%)
 - **Bounding boxes**: Caixas verdes (faces detectadas) e vermelhas (matches)
 
-## 🔧 Endpoints da API
+## Endpoints da API
 
 ### Principais
 
@@ -144,7 +144,7 @@ album/
 - `POST /search_client` - Busca específica por cliente
 - `GET /client_stats/<client_id>` - Estatísticas de cliente
 
-## ⚙️ Configurações Avançadas
+## Configurações Avançadas
 
 ### Parâmetros do Motor de Reconhecimento
 
@@ -179,7 +179,7 @@ AWS_S3_BUCKET_NAME=seu_bucket
 AWS_S3_REGION=us-east-1
 ```
 
-## 🔍 Como Funciona o Reconhecimento
+## Como Funciona o Reconhecimento
 
 ### 1. Detecção Facial
 - InsightFace detecta e extrai faces das imagens
@@ -201,7 +201,7 @@ AWS_S3_REGION=us-east-1
 - Remove duplicatas
 - Calcula confiança final
 
-## 📊 Monitoramento e Logs
+## Monitoramento e Logs
 
 ### Health Check
 
@@ -230,10 +230,10 @@ Resposta:
 docker-compose logs -f face-recognition
 
 # Logs específicos
-docker-compose logs face-recognition | grep "✅\|❌\|🔍"
+docker-compose logs face-recognition | grep "SUCCESS\|ERROR\|SEARCH"
 ```
 
-## 🚨 Solução de Problemas
+## Solução de Problemas
 
 ### Problemas Comuns
 
@@ -261,14 +261,14 @@ curl -X POST -F "file=@teste.jpg" http://localhost:8080/debug_similarity
 curl http://localhost:8080/health
 ```
 
-## 🔒 Segurança
+## Segurança
 
 - Uploads são processados em memória temporária
 - Arquivos temporários são removidos automaticamente
 - Não há armazenamento permanente de imagens enviadas
 - Redis pode ser configurado com autenticação
 
-## 📈 Performance
+## Performance
 
 ### Benchmarks Típicos
 
@@ -284,7 +284,7 @@ curl http://localhost:8080/health
 - Monitore uso de memória
 - Considere clustering para alta demanda
 
-## 🤝 Contribuição
+## Contribuição
 
 1. Fork o projeto
 2. Crie uma branch para sua feature
@@ -292,16 +292,16 @@ curl http://localhost:8080/health
 4. Push para a branch
 5. Abra um Pull Request
 
-## 📄 Licença
+## Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para detalhes.
 
-## 🆘 Suporte
+## Suporte
 
-- 📧 Email: [seu-email]
-- 🐛 Issues: [GitHub Issues]
-- 📖 Documentação: [Wiki do projeto]
+- Email: [seu-email]
+- Issues: [GitHub Issues]
+- Documentação: [Wiki do projeto]
 
 ---
 
-**Desenvolvido com ❤️ para a comunidade de reconhecimento facial**
+**Desenvolvido para a comunidade de reconhecimento facial**
