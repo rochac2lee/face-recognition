@@ -1,9 +1,14 @@
+"""
+S3 Configuration - Diferencial Opcional
+Configurações para integração com AWS S3.
+Configure as variáveis de ambiente para habilitar funcionalidades S3.
+"""
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configurações AWS S3
+# Configurações AWS S3 (opcional)
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_S3_BUCKET_NAME = os.getenv('AWS_S3_BUCKET_NAME')
