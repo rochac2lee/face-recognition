@@ -313,7 +313,7 @@ def process_s3_image():
             return jsonify({'error': 'Nome do arquivo é obrigatório'}), 400
         
         filename = data['filename']
-        album_prefix = data.get('album_prefix', '1/album')  # Padrão: 1/album
+        album_prefix = data.get('album_prefix')
         logger.info(f"🔄 Processando imagem do S3: {filename} do álbum {album_prefix}")
         
         # Verificar se a imagem existe no S3
