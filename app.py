@@ -9,12 +9,14 @@ import io
 import base64
 import logging
 import threading
+import tempfile
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 import cv2
 import numpy as np
 from PIL import Image
 from face_recognition_redis import FaceRecognitionRedis
+from s3_operations import s3_ops
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +58,7 @@ def initialize_face_engine():
         logger.info("✅ Motor de reconhecimento facial inicializado com sucesso!")
         
         # Construir banco de dados automaticamente em background apenas se não existir
+        # DESATIVADO TEMPORARIAMENTE - processamento automático do álbum
         def build_database_background():
             try:
                 # Verificar se o banco já existe
@@ -64,9 +67,10 @@ def initialize_face_engine():
                     logger.info(f"📥 Banco de dados já existe com {stats['total_faces']} faces - pulando construção automática")
                     return
                 
-                logger.info("🏗️ Iniciando construção automática do banco de dados...")
-                stats = face_engine.build_database_from_folder(app.config['ALBUM_FOLDER'])
-                logger.info(f"✅ Banco construído automaticamente: {stats}")
+                logger.info("🏗️ Processamento automático do álbum DESATIVADO temporariamente")
+                logger.info("💡 Use o endpoint /process_s3_image para processar imagens individualmente")
+                # stats = face_engine.build_database_from_folder(app.config['ALBUM_FOLDER'])
+                # logger.info(f"✅ Banco construído automaticamente: {stats}")
             except Exception as e:
                 logger.error(f"❌ Erro na construção automática do banco: {e}")
         
@@ -252,6 +256,121 @@ def health_check():
         'engine_available': face_engine is not None,
         'database_stats': face_engine.get_database_stats() if face_engine else None
     })
+
+@app.route('/list_s3_images')
+def list_s3_images():
+    """Listar imagens disponíveis no S3 (padrão: 1/album)"""
+    try:
+        album_prefix = request.args.get('album_prefix', '1/album')
+        files = s3_ops.list_album_files(album_prefix)
+        return jsonify({
+            'success': True,
+            'album_prefix': album_prefix,
+            'total_files': len(files),
+            'files': files
+        })
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar imagens S3: {e}")
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+@app.route('/list_s3_albums')
+def list_s3_albums():
+    """Listar todos os álbuns disponíveis no S3"""
+    try:
+        albums = s3_ops.list_all_albums()
+        return jsonify({
+            'success': True,
+            'total_albums': len(albums),
+            'albums': albums
+        })
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar álbuns S3: {e}")
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+@app.route('/list_all_s3_files')
+def list_all_s3_files():
+    """Listar todos os arquivos do bucket S3"""
+    try:
+        files = s3_ops.list_all_files()
+        return jsonify({
+            'success': True,
+            'total_files': len(files),
+            'files': files
+        })
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar arquivos S3: {e}")
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+@app.route('/process_s3_image', methods=['POST'])
+def process_s3_image():
+    """Processar uma imagem do S3 e adicionar faces ao banco de dados"""
+    if face_engine is None:
+        return jsonify({'error': 'Motor de reconhecimento não disponível'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'filename' not in data:
+            return jsonify({'error': 'Nome do arquivo é obrigatório'}), 400
+        
+        filename = data['filename']
+        album_prefix = data.get('album_prefix', '1/album')  # Padrão: 1/album
+        logger.info(f"🔄 Processando imagem do S3: {filename} do álbum {album_prefix}")
+        
+        # Verificar se a imagem existe no S3
+        if not s3_ops.image_exists(filename, album_prefix):
+            return jsonify({'error': f'Imagem {filename} não encontrada no álbum {album_prefix}'}), 404
+        
+        # Baixar imagem para arquivo temporário
+        temp_path = s3_ops.download_image_to_temp(filename, album_prefix)
+        if not temp_path:
+            return jsonify({'error': f'Erro ao baixar imagem {filename} do álbum {album_prefix}'}), 500
+        
+        try:
+            # Extrair embeddings das faces
+            face_data = face_engine.extract_face_embeddings(temp_path)
+            
+            if not face_data:
+                logger.warning(f"⚠️ Nenhuma face detectada em: {filename}")
+                return jsonify({
+                    'success': True,
+                    'filename': filename,
+                    'faces_detected': 0,
+                    'faces_added': 0,
+                    'message': 'Nenhuma face detectada na imagem'
+                })
+            
+            # Usar nome do arquivo (sem extensão) como person_id
+            person_id = os.path.splitext(filename)[0]
+            
+            # Criar caminho S3 real para salvar no banco
+            s3_image_path = f"{album_prefix}/{filename}"
+            
+            # Adicionar faces ao banco de dados (usando caminho S3 real)
+            faces_added = face_engine.add_faces_to_database_with_s3_path(
+                temp_image_path=temp_path,
+                s3_image_path=s3_image_path,
+                person_id=person_id
+            )
+            
+            logger.info(f"✅ Processado {filename}: {faces_added} faces adicionadas")
+            
+            return jsonify({
+                'success': True,
+                'filename': filename,
+                'person_id': person_id,
+                'faces_detected': len(face_data),
+                'faces_added': faces_added,
+                'message': f'Sucesso: {faces_added} faces adicionadas ao banco'
+            })
+            
+        finally:
+            # Limpar arquivo temporário
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao processar imagem S3: {e}")
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
 @app.route('/debug_similarity', methods=['POST'])
 def debug_similarity():
