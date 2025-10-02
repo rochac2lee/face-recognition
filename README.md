@@ -39,7 +39,7 @@ Sistema avançado de reconhecimento facial desenvolvido com **InsightFace**, **F
 ### 1. Clone o Repositório
 
 ```bash
-git clone <seu-repositorio>
+git clone git@github.com:rochac2lee/face-recognition.git
 cd face-recognition
 ```
 
