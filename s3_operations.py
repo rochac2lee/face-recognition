@@ -1,3 +1,8 @@
+"""
+S3 Operations - Diferencial Opcional
+Este módulo fornece funcionalidades S3 como diferencial opcional.
+Para usar, configure as variáveis de ambiente necessárias.
+"""
 import boto3
 import os
 import logging
